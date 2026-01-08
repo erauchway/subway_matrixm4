@@ -432,10 +432,10 @@ def format_train_text_with_badges(trains, direction):
             route_times[route] = []
         route_times[route].append(mins)
 
-    # Create list of (route, times) tuples
+    # Create list of (route, times) tuples - LIMIT to first 2 times per route to save memory
     result = []
     for route in sorted(route_times.keys()):
-        times = ','.join(str(t) for t in route_times[route][:3])
+        times = ','.join(str(t) for t in route_times[route][:2])  # Only show 2 times instead of 3
         result.append((route, times))
 
     return result
@@ -693,6 +693,10 @@ if __name__ == "__main__":
             print("\nFetching train data...")
             train_data = parser.fetch_train_data("A31")
             trains = parser.parse_train_times(train_data, min_minutes=5)
+
+            # Limit trains to reduce memory usage - only keep first 4 trains per direction
+            trains['northbound'] = trains['northbound'][:4]
+            trains['southbound'] = trains['southbound'][:4]
 
             print("\nNorthbound trains (>5 min):")
             for train in trains['northbound']:
