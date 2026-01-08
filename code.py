@@ -460,62 +460,23 @@ def create_scrolling_display(parser, trains, weather=None):
     north_data = format_train_text_with_badges(trains['northbound'], "N")
     south_data = format_train_text_with_badges(trains['southbound'], "S")
 
-    # Create southbound display (bottom half) with TEMPERATURE
+    # Create southbound display (bottom half) - Downtown
     south_scroll_group = displayio.Group()
     south_scroll_group.y = 20
 
-    # Build the entire line with temperature, badges and text
+    # Build the entire line: Downtown label, badges, times, then temperature
     x_offset = 0
 
-    # Add temperature if available with custom degree symbol
-    if weather:
-        # Add temperature number
-        temp_label = label.Label(
-            terminalio.FONT,
-            text=f"{weather['temp_f']}",
-            color=0x6BB6FF,
-            x=x_offset,
-            y=4
-        )
-        south_scroll_group.append(temp_label)
-        x_offset += len(str(weather['temp_f'])) * 6
-
-        # Add degree symbol bitmap
-        degree_symbol = create_degree_symbol()
-        degree_group = displayio.Group()
-        degree_group.append(degree_symbol)
-        degree_group.x = x_offset
-        degree_group.y = 1  # Raise it up to be superscript-like
-
-        # Color the degree symbol by creating a colored group
-        for i in range(len(degree_symbol.pixel_shader)):
-            if not degree_symbol.pixel_shader.is_transparent(i):
-                degree_symbol.pixel_shader[i] = 0x6BB6FF
-
-        south_scroll_group.append(degree_group)
-        x_offset += 4  # Width of degree symbol + small space
-
-        # Add "F  "
-        f_label = label.Label(
-            terminalio.FONT,
-            text="F  ",
-            color=0x6BB6FF,
-            x=x_offset,
-            y=4
-        )
-        south_scroll_group.append(f_label)
-        x_offset += len("F  ") * 6
-
-    # Add "S: " label
+    # Add "Downtown: " label
     s_label = label.Label(
         terminalio.FONT,
-        text="S: ",
+        text="Downtown: ",
         color=0x6BB6FF,
         x=x_offset,
         y=4
     )
     south_scroll_group.append(s_label)
-    x_offset += 12
+    x_offset += len("Downtown: ") * 6
 
     # Add each route badge and times
     for route, times in south_data:
@@ -537,37 +498,67 @@ def create_scrolling_display(parser, trains, weather=None):
         south_scroll_group.append(times_label)
         x_offset += len(times) * 6 + 6
 
-    south_width = x_offset
-
-    # Create northbound display (top half) with DESCRIPTION
-    north_scroll_group = displayio.Group()
-    north_scroll_group.y = 4
-
-    # Build the entire line with description, badges and text
-    x_offset = 0
-
-    # Add weather description if available
+    # Add temperature at the end if available with custom degree symbol
     if weather:
-        desc_label = label.Label(
+        # Add some spacing before temperature
+        x_offset += 12
+
+        # Add temperature number
+        temp_label = label.Label(
             terminalio.FONT,
-            text=f"{weather['description']}  ",
-            color=0xFF8C40,
+            text=f"{weather['temp_f']}",
+            color=0x6BB6FF,
             x=x_offset,
             y=4
         )
-        north_scroll_group.append(desc_label)
-        x_offset += len(desc_label.text) * 6
+        south_scroll_group.append(temp_label)
+        x_offset += len(str(weather['temp_f'])) * 6
 
-    # Add "N: " label
+        # Add degree symbol bitmap
+        degree_symbol = create_degree_symbol()
+        degree_group = displayio.Group()
+        degree_group.append(degree_symbol)
+        degree_group.x = x_offset
+        degree_group.y = 1  # Raise it up to be superscript-like
+
+        # Color the degree symbol
+        for i in range(len(degree_symbol.pixel_shader)):
+            if not degree_symbol.pixel_shader.is_transparent(i):
+                degree_symbol.pixel_shader[i] = 0x6BB6FF
+
+        south_scroll_group.append(degree_group)
+        x_offset += 4  # Width of degree symbol + small space
+
+        # Add "F"
+        f_label = label.Label(
+            terminalio.FONT,
+            text="F",
+            color=0x6BB6FF,
+            x=x_offset,
+            y=4
+        )
+        south_scroll_group.append(f_label)
+        x_offset += len("F") * 6
+
+    south_width = x_offset
+
+    # Create northbound display (top half) - Uptown
+    north_scroll_group = displayio.Group()
+    north_scroll_group.y = 4
+
+    # Build the entire line: Uptown label, badges, times, then description
+    x_offset = 0
+
+    # Add "Uptown: " label
     n_label = label.Label(
         terminalio.FONT,
-        text="N: ",
+        text="Uptown: ",
         color=0xFF8C40,
         x=x_offset,
         y=4
     )
     north_scroll_group.append(n_label)
-    x_offset += 12
+    x_offset += len("Uptown: ") * 6
 
     # Add each route badge and times
     for route, times in north_data:
@@ -588,6 +579,21 @@ def create_scrolling_display(parser, trains, weather=None):
         )
         north_scroll_group.append(times_label)
         x_offset += len(times) * 6 + 6
+
+    # Add weather description at the end if available
+    if weather:
+        # Add some spacing before description
+        x_offset += 12
+
+        desc_label = label.Label(
+            terminalio.FONT,
+            text=f"{weather['description']}",
+            color=0xFF8C40,
+            x=x_offset,
+            y=4
+        )
+        north_scroll_group.append(desc_label)
+        x_offset += len(weather['description']) * 6
 
     north_width = x_offset
 
@@ -644,14 +650,46 @@ if __name__ == "__main__":
     # Connect to network
     parser.connect()
 
+    # Track startup time for 20-minute timeout
+    startup_time = time.monotonic()
+    run_duration = 20 * 60  # 20 minutes in seconds
+
+    # Initial fetch of both weather and trains
+    print("\nFetching initial weather data...")
+    weather = parser.fetch_weather_data("New York,US")
+    last_weather_update = time.monotonic()
+
     # Main loop
+    north_group = None
+    south_group = None
+    north_width = 0
+    south_width = 0
+    display_width = parser.display.width
+
     while True:
         try:
-            # Fetch weather data
-            print("\nFetching weather data...")
-            weather = parser.fetch_weather_data("New York,US")
+            # Check if 20 minutes have elapsed
+            current_time = time.monotonic()
+            if current_time - startup_time >= run_duration:
+                print("\n20 minutes elapsed - going dormant")
+                # Clear the display
+                blank_group = displayio.Group()
+                parser.display.root_group = blank_group
+                parser.display.refresh()
+                # Turn off display brightness
+                parser.display.brightness = 0
+                print("Display off. Press Reset to restart.")
+                # Infinite sleep loop
+                while True:
+                    time.sleep(3600)  # Sleep indefinitely
 
-            # Fetch and parse train data
+            # Check if we need to update weather (every 10 minutes = 600 seconds)
+            if current_time - last_weather_update >= 600:
+                print("\nFetching weather data...")
+                weather = parser.fetch_weather_data("New York,US")
+                last_weather_update = current_time
+
+            # Fetch and parse train data (every loop = every minute)
             print("\nFetching train data...")
             train_data = parser.fetch_train_data("A31")
             trains = parser.parse_train_times(train_data, min_minutes=5)
@@ -664,8 +702,20 @@ if __name__ == "__main__":
             for train in trains['southbound']:
                 print(f"  Route {train['route']}: {train['minutes_until']} min")
 
-            # Create/update display with weather
-            north_group, south_group, north_width, south_width, display_width = create_scrolling_display(parser, trains, weather)
+            # Only create display on first run, otherwise reuse
+            if north_group is None:
+                # Create/update display with weather
+                north_group, south_group, north_width, south_width, display_width = create_scrolling_display(parser, trains, weather)
+            else:
+                # Just update the existing display with new data
+                # For now, recreate since updating is complex
+                # Free old groups first
+                north_group = None
+                south_group = None
+                import gc
+                gc.collect()  # Force garbage collection
+
+                north_group, south_group, north_width, south_width, display_width = create_scrolling_display(parser, trains, weather)
 
             # Manual scrolling animation - each line loops independently
             north_position = 0
@@ -690,4 +740,6 @@ if __name__ == "__main__":
 
         except Exception as e:
             print(f"Error: {e}")
+            import gc
+            gc.collect()  # Try to free memory
             time.sleep(10)  # Wait before retrying
